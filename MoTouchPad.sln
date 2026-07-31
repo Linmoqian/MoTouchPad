@@ -1,0 +1,64 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "windows-app", "windows-app", "{6EB328DF-219A-878A-0974-07AE6A24F0A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MoTouchPad.Windows", "windows-app\MoTouchPad.Windows.csproj", "{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProtocolSmokeTest", "tools\ProtocolSmokeTest\ProtocolSmokeTest.csproj", "{05607F15-A983-4E37-AB37-C12F23B4BF9D}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "MoTouchPad.Driver", "windows-driver\MoTouchPad.Driver.vcxproj", "{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Debug|x64.Build.0 = Debug|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Debug|x86.Build.0 = Debug|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Release|x64.ActiveCfg = Release|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Release|x64.Build.0 = Release|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Release|x86.ActiveCfg = Release|Any CPU
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8}.Release|x86.Build.0 = Release|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Debug|x64.Build.0 = Debug|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Debug|x86.Build.0 = Debug|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Release|x64.ActiveCfg = Release|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Release|x64.Build.0 = Release|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Release|x86.ActiveCfg = Release|Any CPU
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D}.Release|x86.Build.0 = Release|Any CPU
+		{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}.Debug|Any CPU.Build.0 = Debug|x64
+		{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}.Debug|x64.ActiveCfg = Debug|x64
+		{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}.Debug|x64.Build.0 = Debug|x64
+		{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}.Debug|x86.ActiveCfg = Debug|x64
+		{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}.Release|Any CPU.ActiveCfg = Release|x64
+		{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}.Release|x64.ActiveCfg = Release|x64
+		{1E6FCA43-84D6-43E7-A33E-1CF9325AB68A}.Release|x86.ActiveCfg = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E6FE2E5A-3D90-484E-8FFA-9DF6E56762B8} = {6EB328DF-219A-878A-0974-07AE6A24F0A0}
+		{05607F15-A983-4E37-AB37-C12F23B4BF9D} = {6EB328DF-219A-878A-0974-07AE6A24F0A0}
+	EndGlobalSection
+EndGlobal

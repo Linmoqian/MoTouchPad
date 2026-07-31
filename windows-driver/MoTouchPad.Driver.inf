@@ -1,0 +1,62 @@
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System
+ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider    = %ProviderName%
+CatalogFile = MoTouchPad.Driver.cat
+DriverVer   = 07/31/2026,0.1.0.0
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+MoTouchPad.Driver.sys = 1,,
+
+[Manufacturer]
+%ProviderName% = Standard,NTamd64.10.0...19041,NTarm64.10.0...19041
+
+[Standard.NTamd64.10.0...19041]
+%DeviceDescription% = MoTouchPad_Device, Root\MoTouchPad
+
+[Standard.NTarm64.10.0...19041]
+%DeviceDescription% = MoTouchPad_Device, Root\MoTouchPad
+
+[MoTouchPad_Device.NT]
+CopyFiles = DriverCopyFiles
+
+[DriverCopyFiles]
+MoTouchPad.Driver.sys
+
+[MoTouchPad_Device.NT.HW]
+AddReg = MoTouchPad_VhfLowerFilter
+
+[MoTouchPad_VhfLowerFilter]
+HKR,,"LowerFilters",0x00010000,"vhf"
+
+[MoTouchPad_Device.NT.Services]
+AddService = MoTouchPad,%SPSVCINST_ASSOCSERVICE%,MoTouchPad_Service
+
+[MoTouchPad_Service]
+DisplayName   = %ServiceDescription%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %13%\MoTouchPad.Driver.sys
+
+[MoTouchPad_Device.NT.Wdf]
+KmdfService = MoTouchPad,MoTouchPad_Wdf
+
+[MoTouchPad_Wdf]
+KmdfLibraryVersion = 1.35
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ProviderName = "MoTouchPad Project"
+DiskName = "MoTouchPad Driver Installation Media"
+DeviceDescription = "MoTouchPad Virtual Precision Touchpad"
+ServiceDescription = "MoTouchPad VHF Source Driver"
+

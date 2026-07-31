@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0"
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{A96C5DF0-CC12-4D72-BD27-E74993165304}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{0EC6E80F-D10A-4C9F-9BC2-67E912B52DA6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Driver Files">
+      <UniqueIdentifier>{1E64B3DB-EA60-418F-B5E9-A2A75AA53A5B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="driver.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClInclude Include="driver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <Inf Include="MoTouchPad.Driver.inf">
+      <Filter>Driver Files</Filter>
+    </Inf>
+  </ItemGroup>
+</Project>
+

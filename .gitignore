@@ -1,0 +1,29 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.apk
+*.aab
+
+# .NET / Visual Studio
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Driver output
+**/x64/
+**/Debug/
+**/Release/
+*.cer
+*.pfx
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local device screenshots
+/android-*.png

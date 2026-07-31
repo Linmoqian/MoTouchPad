@@ -1,0 +1,32 @@
+<Application x:Class="MoTouchPad.Windows.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="WindowBrush" Color="#0D121A" />
+        <SolidColorBrush x:Key="CardBrush" Color="#151C27" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#263245" />
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#6CE5A8" />
+        <SolidColorBrush x:Key="TextBrush" Color="#EEF3FA" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#93A2B7" />
+
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="#0F151E" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="CaretBrush" Value="{StaticResource PrimaryBrush}" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="FontSize" Value="15" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}" />
+            <Setter Property="Foreground" Value="#08150F" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="22,11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+    </Application.Resources>
+</Application>
+
