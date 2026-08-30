@@ -19,6 +19,14 @@ local.properties
 *.cer
 *.pfx
 
+# Xcode / Swift
+xcuserdata/
+DerivedData/
+*.xcuserstate
+.build/
+.swiftpm/
+*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
 # IDE / OS
 .idea/
 *.iml

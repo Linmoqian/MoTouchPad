@@ -128,6 +128,9 @@ devcon update "$pkg\MoTouchPad.Driver.inf" "Root\MoTouchPad"
 | [`android-app/`](android-app/) | Kotlin Android 触控界面、设置与 TCP 服务端 |
 | [`windows-app/`](windows-app/) | .NET 9 WPF 接收端、ADB 连接与兼容手势 |
 | [`windows-driver/`](windows-driver/) | KMDF / VHF 虚拟 Precision Touchpad 驱动 |
+| [`ios-app/`](ios-app/) | SwiftUI iOS 触控发送端（骨架） |
+| [`mac-app/`](mac-app/) | SwiftUI macOS 接收端（骨架） |
+| [`mac-driver/`](mac-driver/) | DriverKit 虚拟触控板驱动（骨架） |
 | [`protocol/`](protocol/) | 网络帧与驱动 IOCTL 协议 |
 | [`tools/ProtocolSmokeTest/`](tools/ProtocolSmokeTest/) | 协议解析冒烟测试 |
 | [`docs/`](docs/) | 开发和安装文档 |
