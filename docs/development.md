@@ -1,81 +1,82 @@
 # Development guide
 
+应用分层、数据流和输入 backend 选择见 [architecture.md](architecture.md)。
+驱动实验不属于应用 CI 成功条件。
+
 ## Android
 
-Requirements:
+要求：
 
 - Android SDK 36
 - JDK 21
-- Android device running Android 8.0 (API 26) or later
+- Android 8.0（API 26）或更高版本设备
 
-Build:
+构建、lint 和单元测试：
 
-```powershell
-cd android-app
-.\gradlew.bat assembleDebug
-```
+    cd android-app
+    ./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
 
-Install:
+安装：
 
-```powershell
-adb install -r app\build\outputs\apk\debug\app-debug.apk
-```
+    adb install -r app/build/outputs/apk/debug/app-debug.apk
 
-Open MoTouchPad on the device. It enters landscape immersive mode and displays
-the device IP and TCP port.
+打开应用后，它会进入横屏沉浸模式并显示设备 IP 和 TCP 端口。
 
 ## Windows application
 
-Build:
+构建：
 
-```powershell
-dotnet build windows-app\MoTouchPad.Windows.csproj
-```
+    dotnet build windows-app/MoTouchPad.Windows.csproj
 
-Run:
+运行：
 
-```powershell
-dotnet run --project windows-app\MoTouchPad.Windows.csproj
-```
+    dotnet run --project windows-app/MoTouchPad.Windows.csproj
 
-Enter the IP displayed by the Android device and select **Connect**.
+输入 Android 设备显示的 IP 后选择连接。USB 开发需要打开 USB 调试并授权
+电脑，然后选择 USB 连接；应用会检查 adb get-state、建立端口转发，并在
+连接关闭时移除转发。
 
-For USB development, enable USB debugging on Android, authorize the PC, and
-select **USB Connect**. The application checks `adb get-state`, creates an ADB
-port forward, and removes it when the connection closes.
+默认输入 backend 是 MouseFallback。只有勾选实验性 VHF 后才会提交驱动；
+VHF 打开失败或提交失败均回到兼容层，失败帧不重放。
 
-## Driver
+## Apple applications
 
-The driver requires Visual Studio 2022 with WDK 10.0.28000.0. Open an elevated
-Developer PowerShell:
+macOS：
 
-```powershell
-& "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" `
-  windows-driver\MoTouchPad.Driver.vcxproj /p:Configuration=Debug /p:Platform=x64
-```
+    cd mac-app
+    swift build
+    swift test
+    swift run
 
-During development, enable Windows test signing and install the generated INF
-from an elevated terminal. Enabling test signing changes the machine boot
-policy, so it is intentionally not automated by this repository.
+macOS CGEvent 注入需要辅助功能权限。应用按当前显示器的逻辑坐标换算移动，
+不直接使用 Retina 像素尺寸。
 
-```powershell
-bcdedit /set testsigning on
-# Restart Windows, then:
-devcon install path\to\MoTouchPad.Driver.inf "Root\MoTouchPad"
-```
+iOS：
 
-For an existing device node, replace `install` with `update`.
+    xcodebuild -project ios-app/ios-app.xcodeproj -scheme MoTouchPad -destination 'generic/platform=iOS' build CODE_SIGNING_ALLOWED=NO
 
-For public distribution the driver package must be submitted for Microsoft
-signing.
+iOS 需要本地网络权限才能接受电脑连接。触控视图使用本地坐标并开启多指
+触控；监听失败和连接失败通过 UI 状态暴露。
 
-The local WDK 10.0.28000 build tasks require Visual Studio's Spectre-mitigated
-MSVC libraries for a release build. Debug builds disable Spectre library
-selection so development can proceed, but release packaging intentionally does
-not.
+## Protocol fixtures
 
-## Security and network
+    python3 tools/validate_protocol_fixtures.py
+    dotnet run --project tools/ProtocolSmokeTest/ProtocolSmokeTest.csproj
 
-The current development protocol is intentionally LAN-only and unencrypted.
-Do not expose TCP port `47651` to the public internet. Authenticated pairing and
-encrypted control traffic are planned before release.
+协议字节布局、分片/合帧规则和非法值处理见 [protocol/PROTOCOL.md](../protocol/PROTOCOL.md)。
+
+## Drivers
+
+Windows 驱动需要 Visual Studio 2022、WDK 10.0.28000.0 和管理员权限：
+
+    msbuild windows-driver/MoTouchPad.Driver.vcxproj /p:Configuration=Debug /p:Platform=x64
+
+开发期间安装 INF 可能需要测试签名。修改系统启动策略前应确认正在使用专用
+开发机或虚拟机。驱动不进入应用 CI，也不参与应用构建成功条件。
+
+mac-driver/ 目前只保留 DriverKit 实验占位，不接触网络和 UI。
+
+## Security
+
+开发协议仅面向可信局域网，未加入配对、身份验证或加密。不要把 TCP 47651
+暴露到公网。

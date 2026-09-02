@@ -39,4 +39,14 @@ android {
         // reproducible builds; 8.14.5 contains no required project fix.
         disable += "AndroidGradlePluginVersion"
     }
+
+    sourceSets {
+        getByName("test") {
+            resources.srcDir("$rootDir/../protocol/fixtures")
+        }
+    }
+}
+
+dependencies {
+    testImplementation("junit:junit:4.13.2")
 }

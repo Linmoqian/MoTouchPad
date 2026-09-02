@@ -1,5 +1,8 @@
 using System.Runtime.InteropServices;
-using MoTouchPad.Windows.Protocol;
+using MoTouchPad.Windows.Model;
+
+// Created on 2026-09-02; updated 2026-09-02.
+// @author: https://github.com/Linmoqian
 
 namespace MoTouchPad.Windows.Input;
 
@@ -21,8 +24,18 @@ internal sealed class MouseFallback
     private bool _twoFingerGesture;
     private bool _suppressUntilRelease;
 
+    public void Reset()
+    {
+        _previous = null;
+        _contactStarted = default;
+        _travel = 0;
+        ResetTwoFingerGesture();
+        _suppressUntilRelease = false;
+    }
+
     public void Submit(TouchFrame frame, bool movePointer = true)
     {
+        if (frame.Type != FrameType.Touch) return;
         var touching = frame.Contacts.Where(contact => contact.Touching).ToArray();
         if (_suppressUntilRelease)
         {
@@ -139,7 +152,9 @@ internal sealed class MouseFallback
         {
             TrackTwoFingerTravel(frame.Contacts);
             var elapsed = DateTime.UtcNow - _twoFingerStarted;
-            if (elapsed < TimeSpan.FromMilliseconds(320) &&
+            var hasRelease = frame.Contacts.Any(contact => !contact.Touching);
+            if (hasRelease &&
+                elapsed < TimeSpan.FromMilliseconds(320) &&
                 _twoFingerTravel < 0.035f &&
                 _twoFingerMode == TwoFingerMode.Undecided)
             {

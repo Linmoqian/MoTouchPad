@@ -1,4 +1,8 @@
 // swift-tools-version: 5.9
+
+// Created on 2026-09-02; updated 2026-09-02.
+// @author: https://github.com/Linmoqian
+
 import PackageDescription
 
 let package = Package(
@@ -7,9 +11,19 @@ let package = Package(
         .macOS(.v13)
     ],
     targets: [
+        .target(
+            name: "MoTouchPadCore",
+            path: "Sources/MoTouchPadCore"
+        ),
         .executableTarget(
             name: "MoTouchPadMac",
+            dependencies: ["MoTouchPadCore"],
             path: "Sources/MoTouchPadMac"
+        ),
+        .testTarget(
+            name: "MoTouchPadCoreTests",
+            dependencies: ["MoTouchPadCore"],
+            path: "Tests/MoTouchPadCoreTests"
         )
     ]
 )

@@ -2,7 +2,10 @@ using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-using MoTouchPad.Windows.Protocol;
+using MoTouchPad.Windows.Model;
+
+// Created on 2026-09-02; updated 2026-09-02.
+// @author: https://github.com/Linmoqian
 
 namespace MoTouchPad.Windows.Input;
 
@@ -31,7 +34,12 @@ internal sealed class DriverClient : IDisposable
             OpenExisting,
             0,
             IntPtr.Zero);
-        return handle.IsInvalid ? null : new DriverClient(handle);
+        if (handle.IsInvalid)
+        {
+            handle.Dispose();
+            return null;
+        }
+        return new DriverClient(handle);
     }
 
     public void Submit(TouchFrame frame)

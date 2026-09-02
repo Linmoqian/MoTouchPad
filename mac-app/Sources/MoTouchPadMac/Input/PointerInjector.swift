@@ -1,9 +1,22 @@
+import AppKit
 import CoreGraphics
 import Foundation
 
-/// 桌面兼容输入层：把触控快照合成 CGEvent 注入系统。
-/// 对应 windows-app 的 MouseFallback；手势状态机是下一阶段的主体工作。
+// Created on 2026-09-02; updated 2026-09-02.
+// @author: https://github.com/Linmoqian
+
+/// macOS 桌面兼容输入层：把手势结果合成为 CGEvent。
 enum PointerInjector {
+    /// 归一化差分 → 当前鼠标所在屏幕的逻辑点位移。
+    static func moveNormalized(dx: Float, dy: Float, sensitivityPercent: Int) {
+        let location = CGEvent(source: nil)?.location ?? .zero
+        let screen = NSScreen.screens.first { $0.frame.contains(location) } ?? NSScreen.main
+        let size = screen?.frame.size ?? CGSize(width: 1, height: 1)
+        move(dx: CGFloat(dx) * size.width,
+             dy: CGFloat(dy) * size.height,
+             sensitivityPercent: sensitivityPercent)
+    }
+
     static func move(dx: CGFloat, dy: CGFloat, sensitivityPercent: Int) {
         let scale = CGFloat(sensitivityPercent) / 100
         guard dx != 0 || dy != 0 else { return }
@@ -32,7 +45,7 @@ enum PointerInjector {
         event?.post(tap: .cghidEventTap)
     }
 
-    /// 捏合缩放 = 按住 Ctrl + 滚轮，与 Windows 端同策略。
+    /// 捏合缩放 = 按住 Ctrl + 滚轮，与 Windows 兼容层保持一致。
     static func zoom(wheelSteps: Int) {
         guard wheelSteps != 0 else { return }
         let ctrlDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x3B, keyDown: true)
@@ -45,17 +58,21 @@ enum PointerInjector {
     }
 
     private static func postMouseEvent(type: CGEventType, dx: CGFloat = 0, dy: CGFloat = 0) {
-        let location = CGEvent(source: nil)?.location ?? CGPoint(x: 0, y: 0)
+        let location = CGEvent(source: nil)?.location ?? .zero
         let moved = CGPoint(x: location.x + dx, y: location.y + dy)
-        let event = CGEvent(mouseEventSource: nil, mouseType: type,
-                            mouseCursorPosition: moved, mouseButton: button(for: type))
+        let event = CGEvent(mouseEventSource: nil,
+                            mouseType: type,
+                            mouseCursorPosition: moved,
+                            mouseButton: button(for: type))
         event?.post(tap: .cghidEventTap)
     }
 
     private static func button(for type: CGEventType) -> CGMouseButton {
         switch type {
-        case .rightMouseDown, .rightMouseUp: return .right
-        default: return .left
+        case .rightMouseDown, .rightMouseUp:
+            return .right
+        default:
+            return .left
         }
     }
 }

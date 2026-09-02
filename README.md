@@ -2,165 +2,132 @@
 
 # MoTouchPad
 
-### 把 Android 手机或平板变成 Windows 触控板
+### 把移动设备变成桌面触控板
 
 [![Android 8+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](android-app/)
+[![iOS 16+](https://img.shields.io/badge/iOS-16%2B-000000?logo=apple&logoColor=white)](ios-app/)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white)](windows-app/)
-[![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)](windows-app/MoTouchPad.Windows.csproj)
-[![WDK](https://img.shields.io/badge/Driver-KMDF%20%2B%20VHF-5C2D91)](windows-driver/)
-[![Status](https://img.shields.io/badge/status-prototype-orange)](#当前限制)
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white)](mac-app/)
+[![CI](https://github.com/Linmoqian/MoTouchPad/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 
-通过 Wi‑Fi 或 USB 连接，将 Android 多点触控数据实时发送到 Windows。  
-支持移动、轻触、右击、双指滚动、自然滚动和捏合缩放。
+Android / iOS 负责采集并发送原始多点触控快照，Windows / macOS 负责接收、
+手势解释和平台输入注入。协议 v1 固定使用 TCP 47651，桌面端按平台能力
+选择输入后端。
 
 </div>
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/android-connected.png" alt="USB 已连接的 Android 触控板界面"></td>
+    <td width="50%"><img src="docs/assets/android-connected.png" alt="Android 触控板连接界面"></td>
     <td width="50%"><img src="docs/assets/android-settings.png" alt="Android 触控板设置界面"></td>
   </tr>
   <tr>
-    <td align="center">顶部状态岛与 USB / Wi‑Fi 连接识别</td>
-    <td align="center">灵敏度、自然滚动与当前 Wi‑Fi 地址</td>
+    <td align="center">USB / Wi-Fi 连接状态</td>
+    <td align="center">灵敏度、自然滚动与 Wi-Fi 地址</td>
   </tr>
 </table>
 
 ## 功能
 
-- 横屏沉浸式触控区域，适合手机和平板。
-- Wi‑Fi TCP 直连，Android 端实时显示局域网地址。
-- USB 调试模式下一键建立 ADB 端口转发。
-- 自动显示等待、已连接状态以及 USB / Wi‑Fi 连接方式。
-- 50%–200% 指针灵敏度调节，设置持久保存并实时生效。
-- 可选自然滚动：双指向下滑动时向上翻页。
-- KMDF + Virtual HID Framework 虚拟 Precision Touchpad 驱动。
-- 未安装驱动时仍可使用完整的鼠标兼容输入路径。
+- Android 和 iOS 全屏多指触控采集，发送完整原始快照。
+- Wi-Fi TCP 直连；Android 支持 USB 调试下的 ADB 端口转发。
+- Windows 默认使用 MouseFallback，支持移动、左键、右键、滚动和缩放。
+- macOS 默认使用 CGEvent，并按当前显示器的逻辑坐标注入输入。
+- 灵敏度只影响指针移动；自然滚动只影响滚动方向。
+- Windows VHF 和 macOS DriverKit 作为独立实验模块保留，不阻塞应用 CI。
 
-## 手势
+## 手势契约
 
-| Android 手势 | Windows 行为 |
+| 移动设备手势 | 桌面行为 |
 |---|---|
-| 单指滑动 | 移动指针 |
+| 单指移动 | 相对指针移动 |
 | 单指轻触 | 左键单击 |
 | 双指轻触 | 右键单击 |
-| 双指上下滑动 | 垂直滚动 |
-| 双指外张 / 捏合 | 放大 / 缩小（`Ctrl + 滚轮`） |
+| 双指移动 | 滚动 |
+| 双指间距变化 | 缩放 |
+| 三指及以上 | 静默，直到全部触点抬起 |
 
-双指手势带有方向锁定和移动阈值，滚动、缩放和双指轻触不会同时触发。
+移动端不预计算点击、滚动或缩放；UP 联系人只发送一次，桌面端用它完成
+点击判定和状态清理。
 
-## 工作原理
+## 数据流
 
-```mermaid
-flowchart LR
-    A["Android 多点触控"] --> B["标准化触控帧"]
-    B -->|"Wi-Fi · TCP 47651"| C["Windows 接收端"]
-    B -->|"USB · ADB Forward"| C
-    C --> D["KMDF / VHF 原始 PTP 报告"]
-    C --> E["桌面兼容输入层"]
-    D --> F["Windows HID / Raw Input"]
-    E --> G["指针 · 点击 · 滚动 · 缩放"]
-```
+    Android / iOS UI
+      -> TouchFrame Model
+      -> protocol v1 codec
+      -> TCP 或 ADB Forward
+      -> Windows / macOS decoder
+      -> TouchFrame Router
+      -> Compatibility / CGEvent / Experimental VHF
 
-每个网络包都是一份完整的多点触控快照。协议采用归一化坐标，并在帧头中携带灵敏度和滚动方向设置。详细格式见 [protocol/PROTOCOL.md](protocol/PROTOCOL.md)。
+线格式见 [protocol/PROTOCOL.md](protocol/PROTOCOL.md)，完整责任边界见
+[docs/architecture.md](docs/architecture.md)。
 
 ## 快速开始
 
-### 1. 构建并安装 Android 应用
+### Android
 
-需要 JDK 21、Android SDK 36，以及 Android 8.0（API 26）或更高版本的设备。
+需要 JDK 21、Android SDK 36，以及 Android 8.0（API 26）或更高版本设备。
 
-```powershell
-cd android-app
-.\gradlew.bat assembleDebug
-adb install -r app\build\outputs\apk\debug\app-debug.apk
-```
+    cd android-app
+    ./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
+    adb install -r app/build/outputs/apk/debug/app-debug.apk
 
-打开 MoTouchPad 后，设备会自动进入横屏沉浸模式，并监听 TCP 端口 `47651`。
+### Windows
 
-### 2. 构建 Windows 接收端
+需要 .NET 9 SDK；USB 连接还需要 Android Platform Tools 中的 adb。
 
-需要 [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)。若使用 USB 连接，还需确保 Android Platform Tools 中的 `adb` 位于 `PATH`。
+    dotnet build windows-app/MoTouchPad.Windows.csproj -c Debug
+    dotnet run --project windows-app/MoTouchPad.Windows.csproj
 
-```powershell
-dotnet build windows-app\MoTouchPad.Windows.csproj -c Debug
-dotnet run --project windows-app\MoTouchPad.Windows.csproj
-```
+Windows UI 默认使用鼠标兼容模式。只有显式勾选实验性 VHF 时才提交驱动；
+两条输入路径不会同时提交。驱动打开或提交失败会自动回到兼容层，失败帧
+不会重放。
 
-连接方式：
+### macOS
 
-1. **USB**：开启 Android 的 USB 调试并授权电脑，然后点击 Windows 端的“USB 连接”。
-2. **Wi‑Fi**：确保两台设备处于同一局域网，在 Windows 端输入 Android 设置页显示的 IP 地址并点击“连接”。
+    cd mac-app
+    swift build
+    swift test
+    swift run
 
-不安装驱动也可以使用单击、右击、滚动和缩放等兼容手势。
+首次注入鼠标需要在系统设置的隐私与安全性 → 辅助功能中授权 MoTouchPad。
 
-## 可选：安装虚拟触控板驱动
+### iOS
 
-驱动开发需要 Visual Studio 2022、Windows Driver Kit 10.0.28000.0，以及管理员权限。
+    xcodebuild -project ios-app/ios-app.xcodeproj -scheme MoTouchPad -destination 'generic/platform=iOS' build CODE_SIGNING_ALLOWED=NO
 
-```powershell
-$msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-& $msbuild windows-driver\MoTouchPad.Driver.vcxproj `
-  /p:Configuration=Debug /p:Platform=x64
-```
-
-当前驱动是开发测试签名。启用测试模式会修改系统启动策略，请仅在开发设备或虚拟机中操作：
-
-```powershell
-bcdedit /set testsigning on
-# 重启 Windows 后，在管理员终端执行：
-$pkg = "$PWD\windows-driver\x64\Debug\MoTouchPad.Driver"
-devcon install "$pkg\MoTouchPad.Driver.inf" "Root\MoTouchPad"
-```
-
-更新已存在的设备节点时使用：
-
-```powershell
-devcon update "$pkg\MoTouchPad.Driver.inf" "Root\MoTouchPad"
-```
-
-面向普通用户发布前，驱动包必须经过 Microsoft 驱动签名流程。更多环境说明见 [开发指南](docs/development.md)。
+首次运行需要允许本地网络访问，应用会在本地网络权限说明中提示用途。
 
 ## 项目结构
 
 | 路径 | 内容 |
 |---|---|
-| [`android-app/`](android-app/) | Kotlin Android 触控界面、设置与 TCP 服务端 |
-| [`windows-app/`](windows-app/) | .NET 9 WPF 接收端、ADB 连接与兼容手势 |
-| [`windows-driver/`](windows-driver/) | KMDF / VHF 虚拟 Precision Touchpad 驱动 |
-| [`ios-app/`](ios-app/) | SwiftUI iOS 触控发送端（骨架） |
-| [`mac-app/`](mac-app/) | SwiftUI macOS 接收端（骨架） |
-| [`mac-driver/`](mac-driver/) | DriverKit 虚拟触控板驱动（骨架） |
-| [`protocol/`](protocol/) | 网络帧与驱动 IOCTL 协议 |
-| [`tools/ProtocolSmokeTest/`](tools/ProtocolSmokeTest/) | 协议解析冒烟测试 |
-| [`docs/`](docs/) | 开发和安装文档 |
+| [android-app/](android-app/) | Android 触控采集、设置、协议与 TCP 服务端 |
+| [ios-app/](ios-app/) | iOS 触控采集、设置、协议与 TCP 服务端 |
+| [windows-app/](windows-app/) | WPF 接收端、TCP/ADB、协议与输入路由 |
+| [mac-app/](mac-app/) | macOS 接收端、协议、手势与 CGEvent |
+| [windows-driver/](windows-driver/) | 独立 KMDF / VHF 驱动实验 |
+| [mac-driver/](mac-driver/) | 独立 DriverKit 驱动实验占位 |
+| [protocol/](protocol/) | 唯一网络协议源和跨端黄金样例 |
+| [tools/](tools/) | fixture 校验、C# smoke test 和 iOS codec harness |
+| [docs/](docs/) | 架构、开发和安装说明 |
+
+## 验证
+
+    python3 tools/validate_protocol_fixtures.py
+    cd mac-app && swift test
+    cd ../android-app && ./gradlew :app:testDebugUnitTest
+    cd .. && dotnet run --project tools/ProtocolSmokeTest/ProtocolSmokeTest.csproj
+
+GitHub Actions 在 Pull Request 和推送到 main 时构建与测试四端应用。CI 不
+上传安装包，不签名、不发布，也不打包驱动。驱动需在对应的 Windows + WDK
+或 macOS + DriverKit 环境人工验证。
 
 ## 当前限制
 
-> MoTouchPad 目前是开发原型，不建议直接暴露在不可信网络中。
+TCP 传输目前没有配对、身份验证和加密，只应运行在可信局域网。USB 仍依赖
+Android USB 调试和 ADB；生产版可替换为正式 USB 通道。Windows 驱动仍需要
+测试签名或 Microsoft 签名流程，macOS DriverKit 仍是实验占位。
 
-- TCP 传输尚未加入配对、身份验证和加密，仅应在可信局域网使用。
-- USB 连接目前依赖 Android USB 调试和 ADB；生产版可替换为 AOA / WinUSB 传输。
-- 部分 Windows 版本不会把软件创建的虚拟 PTP 设备接入桌面手势栈，因此当前同时保留原始 VHF 报告和稳定的桌面兼容输入层。
-- 开发驱动需要 Windows 测试签名模式；正式发行需要 Microsoft 签名。
-
-## 路线图
-
-- 安全配对与加密传输。
-- 无需 USB 调试的生产级 USB 通道。
-- 横向滚动、拖拽和更多可配置手势。
-- Windows 与 Android 安装包自动化发布。
-- 正式签名的 Windows 驱动包。
-
-## 开发
-
-完整构建环境、驱动签名和安装说明见 [docs/development.md](docs/development.md)。提交修改前建议运行：
-
-```powershell
-dotnet build windows-app\MoTouchPad.Windows.csproj -c Debug
-dotnet run --project tools\ProtocolSmokeTest\ProtocolSmokeTest.csproj
-
-cd android-app
-.\gradlew.bat :app:assembleDebug :app:lintDebug
-```
-
+更多环境说明见 [docs/development.md](docs/development.md)。

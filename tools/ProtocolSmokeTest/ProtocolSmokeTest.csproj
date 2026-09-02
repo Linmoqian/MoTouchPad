@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="..\..\windows-app\Protocol\TouchProtocol.cs"
              Link="TouchProtocol.cs" />
+    <Compile Include="..\..\windows-app\Model\TouchModels.cs"
+             Link="TouchModels.cs" />
   </ItemGroup>
 </Project>
-

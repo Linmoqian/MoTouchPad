@@ -1,50 +1,101 @@
-using System.Buffers.Binary;
+using System.Text.Json;
+using MoTouchPad.Windows.Model;
 using MoTouchPad.Windows.Protocol;
 
-const int headerSize = 24;
-const int contactSize = 24;
-var bytes = new byte[headerSize + contactSize];
-BinaryPrimitives.WriteUInt32LittleEndian(bytes, 0x3150544D);
-bytes[4] = 1;
-bytes[5] = (byte)FrameType.Touch;
-BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(8), 42);
-BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(12), 123456789);
-bytes[20] = 1;
-bytes[21] = 0;
-bytes[22] = 135;
-bytes[23] = 1;
+// Created on 2026-09-02; updated 2026-09-02.
+// @author: https://github.com/Linmoqian
 
-var contact = bytes.AsSpan(headerSize);
-contact[0] = 7;
-contact[1] = 1;
-WriteSingle(contact[4..], 0.25f);
-WriteSingle(contact[8..], 0.75f);
-WriteSingle(contact[12..], 0.5f);
-WriteSingle(contact[16..], 0.02f);
-WriteSingle(contact[20..], 0.03f);
+var repositoryRoot = FindRepositoryRoot();
+var fixtureRoot = Path.Combine(repositoryRoot, "protocol", "fixtures");
+var manifest = JsonSerializer.Deserialize<FixtureManifest>(
+    await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "manifest.json")),
+    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+    ?? throw new InvalidOperationException("Cannot read fixture manifest.");
 
-await using var stream = new MemoryStream(bytes);
-var frame = await TouchFrame.ReadAsync(stream, CancellationToken.None);
-Assert(frame.Sequence == 42, "sequence");
-Assert(frame.TimestampNanos == 123456789, "timestamp");
-Assert(frame.SensitivityPercent == 135, "sensitivity");
-Assert(frame.NaturalScrolling, "natural scrolling");
-Assert(frame.Contacts.Count == 1, "contact count");
-Assert(frame.Contacts[0].Id == 7, "contact id");
-Assert(frame.Contacts[0].Touching, "contact state");
-Assert(Math.Abs(frame.Contacts[0].X - 0.25f) < 0.0001f, "x");
-Assert(Math.Abs(frame.Contacts[0].Y - 0.75f) < 0.0001f, "y");
-
-Console.WriteLine("MoTouchPad protocol smoke test passed.");
-
-static void WriteSingle(Span<byte> target, float value)
+foreach (var name in manifest.Valid)
 {
-    BinaryPrimitives.WriteInt32LittleEndian(
-        target,
-        BitConverter.SingleToInt32Bits(value));
+    var bytes = await ReadHexAsync(Path.Combine(fixtureRoot, name));
+    if (name == "stream-two-frames.hex")
+    {
+        await VerifyStreamAsync(bytes);
+        continue;
+    }
+
+    var frame = TouchFrameCodec.Decode(bytes);
+    Assert(bytes.SequenceEqual(TouchFrameCodec.Encode(frame)), $"{name}: canonical bytes");
+}
+
+foreach (var name in manifest.Invalid)
+{
+    var bytes = await ReadHexAsync(Path.Combine(fixtureRoot, name));
+    try
+    {
+        TouchFrameCodec.Decode(bytes);
+    }
+    catch (InvalidDataException)
+    {
+        continue;
+    }
+
+    throw new InvalidOperationException($"{name}: invalid fixture was accepted.");
+}
+
+Console.WriteLine(
+    $"Validated {manifest.Valid.Count} valid and {manifest.Invalid.Count} invalid protocol fixtures.");
+
+static async Task VerifyStreamAsync(byte[] bytes)
+{
+    await using var stream = new ChunkedReadStream(bytes, maxRead: 3);
+    var hello = await TouchFrameCodec.ReadAsync(stream, CancellationToken.None);
+    var touch = await TouchFrameCodec.ReadAsync(stream, CancellationToken.None);
+    Assert(hello.Type == FrameType.Hello, "stream hello");
+    Assert(touch.Type == FrameType.Touch, "stream touch");
+    Assert(touch.Contacts.Count == 1, "stream contact count");
+}
+
+static async Task<byte[]> ReadHexAsync(string path)
+{
+    var tokens = (await File.ReadAllTextAsync(path))
+        .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+    if (tokens.Any(token => token.Length != 2))
+    {
+        throw new InvalidOperationException($"{Path.GetFileName(path)}: invalid hex token.");
+    }
+
+    return tokens.Select(token => Convert.ToByte(token, 16)).ToArray();
+}
+
+static string FindRepositoryRoot()
+{
+    var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (directory is not null)
+    {
+        if (File.Exists(Path.Combine(directory.FullName, "protocol", "fixtures", "manifest.json")))
+        {
+            return directory.FullName;
+        }
+
+        directory = directory.Parent;
+    }
+
+    throw new DirectoryNotFoundException("Cannot locate repository root.");
 }
 
 static void Assert(bool condition, string name)
 {
     if (!condition) throw new InvalidOperationException($"Assertion failed: {name}");
+}
+
+file sealed record FixtureManifest(List<string> Valid, List<string> Invalid);
+
+file sealed class ChunkedReadStream(byte[] bytes, int maxRead) : MemoryStream(bytes)
+{
+    public override ValueTask<int> ReadAsync(
+        Memory<byte> buffer,
+        CancellationToken cancellationToken = default)
+    {
+        return base.ReadAsync(
+            buffer[..Math.Min(buffer.Length, maxRead)],
+            cancellationToken);
+    }
 }

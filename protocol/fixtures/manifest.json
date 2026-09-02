@@ -1,0 +1,25 @@
+{
+  "format": "whitespace-separated hexadecimal bytes",
+  "valid": [
+    "hello-empty.hex",
+    "empty-touch.hex",
+    "single-down.hex",
+    "single-move.hex",
+    "single-up.hex",
+    "two-scroll-start.hex",
+    "two-scroll-move.hex",
+    "two-pinch-start.hex",
+    "two-pinch-move.hex",
+    "five-finger-max.hex",
+    "stream-two-frames.hex"
+  ],
+  "invalid": [
+    "invalid-version.hex",
+    "invalid-type.hex",
+    "invalid-count.hex",
+    "invalid-float.hex",
+    "invalid-length.hex",
+    "invalid-flags.hex",
+    "invalid-state.hex"
+  ]
+}
