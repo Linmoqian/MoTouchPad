@@ -24,6 +24,11 @@ let package = Package(
             name: "MoTouchPadCoreTests",
             dependencies: ["MoTouchPadCore"],
             path: "Tests/MoTouchPadCoreTests"
+        ),
+        .testTarget(
+            name: "MoTouchPadMacTests",
+            dependencies: ["MoTouchPadMac", "MoTouchPadCore"],
+            path: "Tests/MoTouchPadMacTests"
         )
     ]
 )

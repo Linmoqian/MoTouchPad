@@ -1,73 +1,111 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import MoTouchPadCore
 
 // Created on 2026-09-02; updated 2026-09-02.
 // @author: https://github.com/Linmoqian
 
 /// macOS 桌面兼容输入层：把手势结果合成为 CGEvent。
-enum PointerInjector {
+final class PointerInjector: MacInputSink {
+    private var primaryButtonDown = false
+
     /// 归一化差分 → 当前鼠标所在屏幕的逻辑点位移。
-    static func moveNormalized(dx: Float, dy: Float, sensitivityPercent: Int) {
-        let location = CGEvent(source: nil)?.location ?? .zero
-        let screen = NSScreen.screens.first { $0.frame.contains(location) } ?? NSScreen.main
-        let size = screen?.frame.size ?? CGSize(width: 1, height: 1)
-        move(dx: CGFloat(dx) * size.width,
-             dy: CGFloat(dy) * size.height,
-             sensitivityPercent: sensitivityPercent)
+    func moveNormalized(dx: Float, dy: Float, sensitivityPercent: Int) {
+        postNormalizedMouseEvent(type: .mouseMoved, dx: dx, dy: dy,
+                                 sensitivityPercent: sensitivityPercent)
     }
 
-    static func move(dx: CGFloat, dy: CGFloat, sensitivityPercent: Int) {
-        let scale = CGFloat(sensitivityPercent) / 100
-        guard dx != 0 || dy != 0 else { return }
-        postMouseEvent(type: .mouseMoved, dx: dx * scale, dy: dy * scale)
+    func click(button: PointerButton, count: Int) {
+        let repetitions = min(max(count, 1), 2)
+        for clickState in 1...repetitions {
+            switch button {
+            case .primary:
+                postMouseEvent(type: .leftMouseDown, clickState: clickState)
+                postMouseEvent(type: .leftMouseUp, clickState: clickState)
+            case .secondary:
+                postMouseEvent(type: .rightMouseDown, clickState: clickState)
+                postMouseEvent(type: .rightMouseUp, clickState: clickState)
+            }
+        }
     }
 
-    static func leftClick() {
-        postMouseEvent(type: .leftMouseDown)
-        postMouseEvent(type: .leftMouseUp)
+    func beginPrimaryDrag() {
+        guard !primaryButtonDown else { return }
+        postMouseEvent(type: .leftMouseDown, clickState: 1)
+        primaryButtonDown = true
     }
 
-    static func rightClick() {
-        postMouseEvent(type: .rightMouseDown)
-        postMouseEvent(type: .rightMouseUp)
+    func dragNormalized(dx: Float, dy: Float, sensitivityPercent: Int) {
+        let type: CGEventType = primaryButtonDown ? .leftMouseDragged : .mouseMoved
+        postNormalizedMouseEvent(type: type, dx: dx, dy: dy,
+                                 sensitivityPercent: sensitivityPercent)
     }
 
-    static func scroll(wheelSteps: Int) {
-        guard wheelSteps != 0 else { return }
+    func endPrimaryDrag() {
+        guard primaryButtonDown else { return }
+        postMouseEvent(type: .leftMouseUp, clickState: 1)
+        primaryButtonDown = false
+    }
+
+    func scroll(vertical: Int, horizontal: Int) {
+        guard vertical != 0 || horizontal != 0 else { return }
         let event = CGEvent(
             scrollWheelEvent2Source: nil,
             units: .line,
-            wheelCount: 1,
-            wheel1: Int32(clamping: wheelSteps),
-            wheel2: 0,
+            wheelCount: 2,
+            wheel1: Int32(clamping: vertical),
+            wheel2: Int32(clamping: horizontal),
             wheel3: 0)
         event?.post(tap: .cghidEventTap)
     }
 
-    /// 捏合缩放 = 按住 Ctrl + 滚轮，与 Windows 兼容层保持一致。
-    static func zoom(wheelSteps: Int) {
-        guard wheelSteps != 0 else { return }
-        let ctrlDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x3B, keyDown: true)
-        ctrlDown?.flags = .maskControl
-        ctrlDown?.post(tap: .cghidEventTap)
-        scroll(wheelSteps: wheelSteps)
-        let ctrlUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x3B, keyDown: false)
-        ctrlUp?.flags = .maskControl
-        ctrlUp?.post(tap: .cghidEventTap)
+    func send(shortcut: KeyboardShortcut) {
+        let flags = shortcut.modifiers.cgEventFlags
+        let down = CGEvent(keyboardEventSource: nil,
+                           virtualKey: CGKeyCode(shortcut.keyCode),
+                           keyDown: true)
+        down?.flags = flags
+        down?.post(tap: .cghidEventTap)
+
+        let up = CGEvent(keyboardEventSource: nil,
+                         virtualKey: CGKeyCode(shortcut.keyCode),
+                         keyDown: false)
+        up?.flags = flags
+        up?.post(tap: .cghidEventTap)
     }
 
-    private static func postMouseEvent(type: CGEventType, dx: CGFloat = 0, dy: CGFloat = 0) {
+    func reset() {
+        endPrimaryDrag()
+    }
+
+    private func postNormalizedMouseEvent(type: CGEventType, dx: Float, dy: Float,
+                                          sensitivityPercent: Int) {
+        let location = CGEvent(source: nil)?.location ?? .zero
+        let screen = NSScreen.screens.first { $0.frame.contains(location) } ?? NSScreen.main
+        let size = screen?.frame.size ?? CGSize(width: 1, height: 1)
+        let scale = CGFloat(sensitivityPercent) / 100
+        postMouseEvent(type: type,
+                       dx: CGFloat(dx) * size.width * scale,
+                       dy: CGFloat(dy) * size.height * scale,
+                       clickState: 0)
+    }
+
+    private func postMouseEvent(type: CGEventType, dx: CGFloat = 0, dy: CGFloat = 0,
+                                clickState: Int) {
         let location = CGEvent(source: nil)?.location ?? .zero
         let moved = CGPoint(x: location.x + dx, y: location.y + dy)
         let event = CGEvent(mouseEventSource: nil,
                             mouseType: type,
                             mouseCursorPosition: moved,
                             mouseButton: button(for: type))
+        if clickState > 0 {
+            event?.setIntegerValueField(.mouseEventClickState, value: Int64(clickState))
+        }
         event?.post(tap: .cghidEventTap)
     }
 
-    private static func button(for type: CGEventType) -> CGMouseButton {
+    private func button(for type: CGEventType) -> CGMouseButton {
         switch type {
         case .rightMouseDown, .rightMouseUp:
             return .right

@@ -7,6 +7,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var model = ReceiverModel()
+    @State private var showingGestureSettings = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -17,6 +18,9 @@ struct ContentView: View {
                 Text(model.isConnected ? "触控端已连接" : "等待触控端连接")
                     .font(.headline)
                 Spacer()
+                Button("手势设置") {
+                    showingGestureSettings = true
+                }
             }
 
             HStack {
@@ -47,7 +51,7 @@ struct ContentView: View {
 
             HStack {
                 Button("测试鼠标注入（向右跳 2% 屏宽）") {
-                    PointerInjector.moveNormalized(dx: 0.02, dy: 0, sensitivityPercent: 100)
+                    PointerInjector().moveNormalized(dx: 0.02, dy: 0, sensitivityPercent: 100)
                 }
                 Text("点击后鼠标跳动 = 权限正常；不动 = 权限失效")
                     .font(.footnote)
@@ -55,11 +59,17 @@ struct ContentView: View {
             }
 
             Spacer()
-            Text("默认后端：CGEvent；协议接收与手势解释已分层")
+            Text("默认后端：CGEvent；支持单至四指原始触点手势")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
         .padding(20)
+        .sheet(isPresented: $showingGestureSettings) {
+            GestureSettingsView(preferences: model.gesturePreferences)
+        }
+        .onReceive(model.gesturePreferences.$bindings) { bindings in
+            model.updateGestureBindings(bindings)
+        }
     }
 }
 
@@ -71,10 +81,13 @@ final class ReceiverModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var accessibilityGranted = true
 
+    let gesturePreferences = GesturePreferences()
+
     private let client = TouchClient()
     private let inputRouter = TouchFrameRouter()
 
     init() {
+        inputRouter.updateBindings(gesturePreferences.bindings)
         client.onFrame = { [weak self] frame in
             Task { @MainActor in self?.handle(frame) }
         }
@@ -103,6 +116,10 @@ final class ReceiverModel: ObservableObject {
         } else {
             client.connect(host: host)
         }
+    }
+
+    func updateGestureBindings(_ bindings: GestureBindings) {
+        inputRouter.updateBindings(bindings)
     }
 
     private func handle(_ frame: TouchFrame) {

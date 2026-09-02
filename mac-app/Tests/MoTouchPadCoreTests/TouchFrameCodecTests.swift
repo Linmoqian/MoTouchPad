@@ -49,28 +49,20 @@ final class TouchFrameCodecTests: XCTestCase {
     }
 
     func testResetClearsPendingTap() throws {
-        var clicks = 0
         let gestures = GestureRecognizer()
-        gestures.onLeftClick = { clicks += 1 }
-        gestures.feed(try TouchFrameCodec.decode(fixture(named: "single-down.hex")))
-        gestures.reset()
-        gestures.feed(try TouchFrameCodec.decode(fixture(named: "single-up.hex")))
-        XCTAssertEqual(clicks, 0)
+        _ = gestures.feed(try TouchFrameCodec.decode(fixture(named: "single-down.hex")))
+        _ = gestures.reset()
+        XCTAssertTrue(gestures.feed(try TouchFrameCodec.decode(fixture(named: "single-up.hex"))).isEmpty)
     }
 
     func testEmptySnapshotDoesNotClick() throws {
-        var clicks = 0
         let gestures = GestureRecognizer()
-        gestures.onLeftClick = { clicks += 1 }
-        gestures.feed(try TouchFrameCodec.decode(fixture(named: "single-down.hex")))
-        gestures.feed(try TouchFrameCodec.decode(fixture(named: "empty-touch.hex")))
-        XCTAssertEqual(clicks, 0)
+        _ = gestures.feed(try TouchFrameCodec.decode(fixture(named: "single-down.hex")))
+        XCTAssertTrue(gestures.feed(try TouchFrameCodec.decode(fixture(named: "empty-touch.hex"))).isEmpty)
     }
 
     func testTwoFingerTapWaitsForExplicitRelease() {
-        var clicks = 0
         let gestures = GestureRecognizer()
-        gestures.onRightClick = { clicks += 1 }
         let touching = [
             TouchContact(id: 1, touching: true, x: 0.4, y: 0.5,
                          pressure: 0, major: 0, minor: 0),
@@ -93,12 +85,12 @@ final class TouchFrameCodecTests: XCTestCase {
                              pressure: $0.pressure, major: $0.major, minor: $0.minor)
             })
 
-        gestures.feed(base)
-        gestures.feed(empty)
-        XCTAssertEqual(clicks, 0)
-        gestures.feed(base)
-        gestures.feed(released)
-        XCTAssertEqual(clicks, 1)
+        _ = gestures.feed(base, now: 0)
+        _ = gestures.feed(empty, now: 0.1)
+        XCTAssertTrue(gestures.flushPending(now: 10).isEmpty)
+        _ = gestures.feed(base, now: 20)
+        _ = gestures.feed(released, now: 20.1)
+        XCTAssertEqual(gestures.flushPending(now: 20.5), [.click(button: .secondary, count: 1)])
     }
 
     private func fixture(named name: String) throws -> Data {

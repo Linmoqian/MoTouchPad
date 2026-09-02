@@ -1,38 +1,46 @@
+import Foundation
 import MoTouchPadCore
 
 // Created on 2026-09-02; updated 2026-09-02.
 // @author: https://github.com/Linmoqian
 
-/// macOS 的正式应用输入后端：手势由 Core 解释，动作由 CGEvent 注入。
+/// macOS 正式输入后端：Core 解释手势，CGEvent 注入对应鼠标与快捷键。
+@MainActor
 final class CGEventInputBackend {
     private let gestures = GestureRecognizer()
+    private let executor = GestureActionExecutor()
+    private var pendingSecondaryTapWork: DispatchWorkItem?
 
-    init() {
-        gestures.onMove = { dx, dy, sensitivity in
-            PointerInjector.moveNormalized(
-                dx: dx,
-                dy: dy,
-                sensitivityPercent: sensitivity)
-        }
-        gestures.onScroll = { lines, _ in
-            PointerInjector.scroll(wheelSteps: lines)
-        }
-        gestures.onZoom = { steps in
-            PointerInjector.zoom(wheelSteps: steps)
-        }
-        gestures.onLeftClick = {
-            PointerInjector.leftClick()
-        }
-        gestures.onRightClick = {
-            PointerInjector.rightClick()
-        }
+    func updateBindings(_ bindings: GestureBindings) {
+        executor.updateBindings(bindings)
     }
 
     func submit(_ frame: TouchFrame) {
-        gestures.feed(frame)
+        executor.execute(gestures.feed(frame))
+        schedulePendingSecondaryTap()
     }
 
     func reset() {
-        gestures.reset()
+        pendingSecondaryTapWork?.cancel()
+        pendingSecondaryTapWork = nil
+        executor.execute(gestures.reset())
+        executor.reset()
+    }
+
+    private func schedulePendingSecondaryTap() {
+        pendingSecondaryTapWork?.cancel()
+        guard let deadline = gestures.pendingSecondaryTapDeadline else {
+            pendingSecondaryTapWork = nil
+            return
+        }
+
+        let delay = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.executor.execute(self.gestures.flushPending())
+            self.schedulePendingSecondaryTap()
+        }
+        pendingSecondaryTapWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 }
