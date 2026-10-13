@@ -1,5 +1,8 @@
 # MoTouchPad for iOS
 
+TCP 启用 noDelay，发送队列有界且最多一帧正在发送。连续运动可合并，触点增减、
+UP、取消、方向反转和设置变化保持顺序；关键帧积压超限时断开并清理桌面触控状态。
+
 将 iPhone / iPad 作为触控板的 SwiftUI/UIKit 发送端。
 
 ## 技术路线

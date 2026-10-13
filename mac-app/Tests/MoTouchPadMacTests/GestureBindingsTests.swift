@@ -18,6 +18,32 @@ final class GestureBindingsTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(GestureBindings.self, from: data), .defaults)
     }
 
+    func testClickTrackerMatchesSystemDoubleClickWindow() {
+        var clicks = PointerClickTracker()
+        XCTAssertEqual(clicks.record(now: 1, x: 200, y: 200, interval: 0.5), 1)
+        XCTAssertEqual(clicks.record(now: 1.2, x: 201, y: 200, interval: 0.5), 2)
+        XCTAssertEqual(clicks.record(now: 1.3, x: 201, y: 200, interval: 0.5), 1)
+        clicks.reset()
+        XCTAssertEqual(clicks.record(now: 1.4, x: 201, y: 200, interval: 0.5), 1)
+        XCTAssertEqual(clicks.record(now: 1.5, x: 300, y: 200, interval: 0.5), 1)
+    }
+
+    func testLegacyPreferencesKeepCustomBindingsWhenAddingSwitchApp() throws {
+        let suiteName = "MoTouchPadLegacyTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var legacy = GestureBindings.defaults
+        legacy.lookUp = KeyboardShortcut(keyCode: 2, modifiers: [.option, .command])
+        let data = try JSONEncoder().encode(legacy)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "switchApp")
+        defaults.set(try JSONSerialization.data(withJSONObject: object),
+                     forKey: "MoTouchPad.gestureBindings.v1")
+        let restored = GesturePreferences(defaults: defaults)
+        XCTAssertEqual(restored.bindings.lookUp, legacy.lookUp)
+        XCTAssertEqual(restored.bindings.switchApp, GestureBindings.defaults.switchApp)
+    }
+
     func testPreferencesPersistAndCanRestoreDefaults() {
         let suiteName = "MoTouchPadTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -29,6 +55,8 @@ final class GestureBindingsTests: XCTestCase {
         let custom = KeyboardShortcut(keyCode: 2, modifiers: [.command, .option])
         preferences.set(custom, for: .rotateClockwise)
         XCTAssertEqual(GesturePreferences(defaults: defaults).bindings.binding(for: .rotateClockwise), custom)
+        preferences.set(nil, for: .switchApp)
+        XCTAssertNil(GesturePreferences(defaults: defaults).bindings.switchApp)
 
         preferences.resetToDefaults()
         XCTAssertEqual(preferences.bindings, .defaults)

@@ -38,7 +38,7 @@ struct ContentView: View {
             }
 
             if !model.accessibilityGranted {
-                Text("⚠️ 需要辅助功能权限才能移动鼠标：系统设置 → 隐私与安全性 → 辅助功能 → 打开 MoTouchPad\n重新打包后需重新授权；若已勾选仍无效，删除条目重新添加后重启本应用")
+                Text("需要辅助功能权限才能移动鼠标：系统设置 → 隐私与安全性 → 辅助功能 → 打开 MoTouchPad\n重新打包后需重新授权；若已勾选仍无效，删除条目重新添加后重启本应用")
                     .font(.callout)
                     .foregroundStyle(.red)
             }
@@ -85,20 +85,21 @@ final class ReceiverModel: ObservableObject {
 
     private let client = TouchClient()
     private let inputRouter = TouchFrameRouter()
+    private var lastStatusUpdate: TimeInterval = -.infinity
 
     init() {
         inputRouter.updateBindings(gesturePreferences.bindings)
-        client.onFrame = { [weak self] frame in
-            Task { @MainActor in self?.handle(frame) }
+        client.onFrames = { [weak self] frames in
+            guard let self else { return }
+            for frame in frames { self.inputRouter.route(frame) }
+            if let last = frames.last { self.handleStatus(last) }
         }
         client.onStateChange = { [weak self] connected in
-            Task { @MainActor in
-                self?.isConnected = connected
-                if !connected { self?.inputRouter.reset() }
-            }
+            self?.isConnected = connected
+            self?.inputRouter.reset()
         }
         client.onError = { [weak self] message in
-            Task { @MainActor in self?.errorMessage = message }
+            self?.errorMessage = message
         }
         checkAccessibility()
     }
@@ -111,6 +112,7 @@ final class ReceiverModel: ObservableObject {
 
     func toggleConnection() {
         errorMessage = nil
+        inputRouter.reset()
         if isConnected {
             client.disconnect()
         } else {
@@ -122,7 +124,10 @@ final class ReceiverModel: ObservableObject {
         inputRouter.updateBindings(bindings)
     }
 
-    private func handle(_ frame: TouchFrame) {
+    private func handleStatus(_ frame: TouchFrame) {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard frame.type == .hello || now - lastStatusUpdate >= 0.1 else { return }
+        lastStatusUpdate = now
         if !accessibilityGranted {
             accessibilityGranted = AXIsProcessTrusted()
         }
@@ -134,7 +139,6 @@ final class ReceiverModel: ObservableObject {
             touch 序号 \(frame.sequence) 点数 \(frame.contacts.count) \
             灵敏度 \(frame.sensitivityPercent)% 自然滚动 \(frame.naturalScrolling)
             """
-            inputRouter.route(frame)
         }
     }
 }

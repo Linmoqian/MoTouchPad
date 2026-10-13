@@ -11,6 +11,11 @@ let package = Package(
         .macOS(.v13)
     ],
     targets: [
+        .executableTarget(
+            name: "TouchPipelineBenchmark",
+            dependencies: ["MoTouchPadCore"],
+            path: "Benchmarks/TouchPipelineBenchmark"
+        ),
         .target(
             name: "MoTouchPadCore",
             path: "Sources/MoTouchPadCore"

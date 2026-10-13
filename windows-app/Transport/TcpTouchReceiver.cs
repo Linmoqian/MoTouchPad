@@ -16,6 +16,7 @@ internal sealed class TcpTouchReceiver
         Action<TouchFrame> onFrame,
         CancellationToken cancellationToken)
     {
+        client.NoDelay = true;
         await using var stream = client.GetStream();
         using var heartbeatCancellation =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

@@ -1,15 +1,17 @@
 import Foundation
 
-// Created on 2026-09-02; updated 2026-09-02.
+// Created on 2026-09-02; updated 2026-10-13.
 // @author: https://github.com/Linmoqian
 
 /// 把移动端原始触控快照解释为平台无关的桌面动作。
 ///
-/// 手势时长以发送端的单调时间戳判断，只有延迟右键使用本机单调时钟安排。
+/// 手势时长以发送端单调时间戳判断，延迟右键和静止停留用本机单调时钟安排。
 public final class GestureRecognizer {
     public struct Config {
         public var tapMaxDuration: TimeInterval = 0.28
         public var tapMaxTravel: Float = 0.018
+        public var pointerStartTravel: Float = 0.004
+        public var smartZoomEnabled = true
         public var doubleTapMaxInterval: TimeInterval = 0.30
         public var doubleTapMaxDistance: Float = 0.03
         public var pinchTriggerRatio: Float = 0.10
@@ -34,8 +36,26 @@ public final class GestureRecognizer {
         pendingSecondaryTap?.deadline
     }
 
+    /// 协议 ID 范围 0...255，用固定四段位集代替每帧 Set 分配。
+    private struct ContactIDs: Equatable {
+        private var bits = SIMD4<UInt64>(repeating: 0)
+        mutating func insert(_ id: UInt8) {
+            bits[Int(id) / 64] |= UInt64(1) << (Int(id) % 64)
+        }
+        func contains(_ id: UInt8) -> Bool {
+            bits[Int(id) / 64] & (UInt64(1) << (Int(id) % 64)) != 0
+        }
+        func isSubset(of other: ContactIDs) -> Bool {
+            for index in 0..<4 where bits[index] & ~other.bits[index] != 0 { return false }
+            return true
+        }
+    }
+
     private struct Snapshot {
-        let ids: Set<UInt8>
+        let ids: ContactIDs
+        let orderedIDs: SIMD4<UInt8>
+        let positions: SIMD8<Float>
+        let count: Int
         let centroid: SIMD2<Float>
         let pairDistance: Float
         let pairAngle: Float
@@ -43,7 +63,7 @@ public final class GestureRecognizer {
     }
 
     private struct BaseSession {
-        var ids: Set<UInt8>
+        var ids: ContactIDs
         let start: Snapshot
         var last: Snapshot
         let startedAt: TimeInterval
@@ -55,6 +75,8 @@ public final class GestureRecognizer {
         var base: BaseSession
         var moved: Bool
         var sensitivityPercent: Int
+        var secondTap = false
+        var dragging = false
     }
 
     private enum TwoKind: Equatable {
@@ -86,6 +108,7 @@ public final class GestureRecognizer {
         var base: BaseSession
         var kind: ThreeKind
         var sensitivityPercent: Int
+        var holdDeadline: TimeInterval
     }
 
     private enum FourKind: Equatable {
@@ -114,6 +137,36 @@ public final class GestureRecognizer {
     private var mode: Mode = .idle
     private var pendingSecondaryTap: PendingSecondaryTap?
     private var suppressUntilRelease = false
+    private var lastPrimaryTap: (position: SIMD2<Float>, time: TimeInterval)?
+
+    public var nextDeadline: TimeInterval? {
+        let hold: TimeInterval?
+        if case .three(let session) = mode, session.kind == .pending,
+           session.base.travel <= config.tapMaxTravel {
+            hold = session.holdDeadline
+        } else {
+            hold = nil
+        }
+        switch (pendingSecondaryTapDeadline, hold?.isFinite == true ? hold : nil) {
+        case (let pending?, let hold?): return min(pending, hold)
+        case (let pending?, nil): return pending
+        case (nil, let hold?): return hold
+        case (nil, nil): return nil
+        }
+    }
+
+    /// Timer-driven gestures must also progress when the phone sends no stationary frames.
+    public func advance(now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> [GestureAction] {
+        var actions = flushPending(now: now)
+        if case .three(var session) = mode, session.kind == .pending,
+           session.base.travel <= config.tapMaxTravel, now >= session.holdDeadline {
+            session.kind = .dragging
+            mode = .three(session)
+            actions.append(.drag(phase: .began, dx: 0, dy: 0,
+                                 sensitivityPercent: session.sensitivityPercent))
+        }
+        return actions
+    }
 
     public init() {}
 
@@ -123,8 +176,13 @@ public final class GestureRecognizer {
         guard frame.type == .touch else { return [] }
 
         var actions = flushPending(now: now)
-        let active = frame.contacts.filter { $0.touching }.sorted { $0.id < $1.id }
-        let released = frame.contacts.filter { !$0.touching }
+        var active: [TouchContact] = []
+        var released: [TouchContact] = []
+        active.reserveCapacity(frame.contacts.count)
+        for contact in frame.contacts {
+            if contact.touching { active.append(contact) } else { released.append(contact) }
+        }
+        active.sort { $0.id < $1.id }
 
         if suppressUntilRelease {
             if active.isEmpty { suppressUntilRelease = false }
@@ -169,26 +227,39 @@ public final class GestureRecognizer {
             actions.append(.drag(phase: .ended, dx: 0, dy: 0,
                                  sensitivityPercent: three.sensitivityPercent))
         }
+        if case .single(let single) = mode, single.dragging {
+            actions.append(.drag(phase: .ended, dx: 0, dy: 0,
+                                 sensitivityPercent: single.sensitivityPercent))
+        }
         mode = .idle
         pendingSecondaryTap = nil
         suppressUntilRelease = false
+        lastPrimaryTap = nil
         return actions
     }
 
     private func begin(active: [TouchContact], frame: TouchFrame, now: TimeInterval,
                        actions: inout [GestureAction]) {
         guard !active.isEmpty else { return }
+        if active.count != 1 { lastPrimaryTap = nil }
         switch active.count {
         case 1:
+            let current = base(for: active, frame: frame)
+            let secondTap = lastPrimaryTap.map {
+                sourceTime(frame) >= $0.time && sourceTime(frame) - $0.time <= config.doubleTapMaxInterval &&
+                    distance($0.position, current.start.centroid) <= config.doubleTapMaxDistance
+            } ?? false
+            lastPrimaryTap = nil
             mode = .single(SingleSession(
-                base: base(for: active, frame: frame), moved: false,
-                sensitivityPercent: frame.sensitivityPercent))
+                base: current, moved: false,
+                sensitivityPercent: frame.sensitivityPercent, secondTap: secondTap))
         case 2:
             mode = .two(startTwo(active: active, frame: frame, now: now, actions: &actions))
         case 3:
             mode = .three(ThreeSession(
                 base: base(for: active, frame: frame), kind: .pending,
-                sensitivityPercent: frame.sensitivityPercent))
+                sensitivityPercent: frame.sensitivityPercent,
+                holdDeadline: now + config.threeFingerHoldDuration))
         case 4:
             mode = .four(FourSession(base: base(for: active, frame: frame), kind: .pending))
         default:
@@ -222,13 +293,17 @@ public final class GestureRecognizer {
                             now: TimeInterval, actions: inout [GestureAction]) {
         var session = previous
         if active.isEmpty {
-            session.base.sawExplicitRelease = session.base.sawExplicitRelease ||
-                released.contains { session.base.ids.contains($0.id) }
-            if session.base.sawExplicitRelease,
+            session.base.sawExplicitRelease = released.contains { session.base.ids.contains($0.id) }
+            if session.dragging {
+                actions.append(.drag(phase: .ended, dx: 0, dy: 0,
+                                     sensitivityPercent: session.sensitivityPercent))
+            } else if session.base.sawExplicitRelease,
+               contactsStayedNearStart(released, start: session.base.start),
                elapsed(from: session.base, frame: frame) <= config.tapMaxDuration,
                session.base.travel <= config.tapMaxTravel,
                !session.moved {
                 actions.append(.click(button: .primary, count: 1))
+                lastPrimaryTap = (session.base.last.centroid, sourceTime(frame))
             }
             mode = .idle
             return
@@ -258,9 +333,21 @@ public final class GestureRecognizer {
         let delta = snap.centroid - session.base.last.centroid
         let total = snap.centroid - session.base.start.centroid
         session.base.travel += manhattan(delta)
-        if manhattan(total) > config.tapMaxTravel {
-            actions.append(.move(dx: delta.x, dy: delta.y,
-                                 sensitivityPercent: frame.sensitivityPercent))
+        if session.moved || manhattan(total) > config.pointerStartTravel {
+            // 首次跨阈值输出从触点按下以来的完整差分，避免丢掉积累位移。
+            let movement = session.moved ? delta : total
+            if session.secondTap {
+                if !session.dragging {
+                    actions.append(.drag(phase: .began, dx: 0, dy: 0,
+                                         sensitivityPercent: frame.sensitivityPercent))
+                    session.dragging = true
+                }
+                actions.append(.drag(phase: .moved, dx: movement.x, dy: movement.y,
+                                     sensitivityPercent: frame.sensitivityPercent))
+            } else {
+                actions.append(.move(dx: movement.x, dy: movement.y,
+                                     sensitivityPercent: frame.sensitivityPercent))
+            }
             session.moved = true
         }
         session.base.last = snap
@@ -273,14 +360,17 @@ public final class GestureRecognizer {
                          now: TimeInterval, actions: inout [GestureAction]) {
         var session = previous
         if active.isEmpty {
-            session.base.sawExplicitRelease = session.base.sawExplicitRelease ||
-                released.contains { session.base.ids.contains($0.id) }
-            finishTwo(session, frame: frame, now: now, actions: &actions)
+            session.base.sawExplicitRelease = released.contains { session.base.ids.contains($0.id) }
+            finishTwo(session, released: released, frame: frame, now: now, actions: &actions)
             return
         }
 
-        let activeIds = Set(active.map { $0.id })
+        let activeIds = identifiers(active)
         if active.count < 2, activeIds.isSubset(of: session.base.ids) {
+            guard contactsStayedNearStart(active, start: session.base.start) else {
+                actions += cancelAndSuppress()
+                return
+            }
             session.base.sawExplicitRelease = session.base.sawExplicitRelease ||
                 released.contains { session.base.ids.contains($0.id) }
             if session.kind == .undecided {
@@ -314,6 +404,7 @@ public final class GestureRecognizer {
             session.matchesPendingSecondaryTap = false
         }
 
+        let previousKind = session.kind
         switch session.kind {
         case .undecided:
             let pinchRatio = session.base.start.pairDistance > 0
@@ -326,13 +417,13 @@ public final class GestureRecognizer {
                 session.kind = .rotate
             } else if isVertical(delta) && manhattan(total) >= 0.006 {
                 session.kind = .scroll
-            } else if isHorizontal(total),
+            } else if manhattan(total) >= 0.006, isHorizontal(total),
                       duration <= config.swipeMaxDuration,
                       abs(total.x) >= config.swipeMinTravel,
                       velocity >= config.swipeMinVelocity {
                 actions.append(.command(total.x > 0 ? .pageBack : .pageForward, repeats: 1))
                 session.kind = .consumed
-            } else if isHorizontal(total),
+            } else if manhattan(total) >= 0.006, isHorizontal(total),
                       duration >= config.swipeMaxDuration || velocity < config.swipeMinVelocity {
                 session.kind = .horizontalScroll
             }
@@ -340,22 +431,24 @@ public final class GestureRecognizer {
             break
         }
 
+        let reference = previousKind == .undecided ? session.base.start : session.base.last
+        let gestureDelta = snap.centroid - reference.centroid
         switch session.kind {
         case .scroll:
-            let signed = delta.y * config.scrollLinesPerScreen *
+            let signed = gestureDelta.y * config.scrollLinesPerScreen *
                 (frame.naturalScrolling ? 1 : -1)
             session.verticalRemainder += signed
             let steps = integralSteps(&session.verticalRemainder)
             if steps != 0 { actions.append(.scroll(vertical: steps, horizontal: 0)) }
         case .horizontalScroll:
-            let signed = delta.x * config.scrollLinesPerScreen *
+            let signed = gestureDelta.x * config.scrollLinesPerScreen *
                 (frame.naturalScrolling ? 1 : -1)
             session.horizontalRemainder += signed
             let steps = integralSteps(&session.horizontalRemainder)
             if steps != 0 { actions.append(.scroll(vertical: 0, horizontal: steps)) }
         case .pinch:
-            let denominator = max(session.base.last.pairDistance, 0.001)
-            session.pinchRemainder += (snap.pairDistance - session.base.last.pairDistance) /
+            let denominator = max(reference.pairDistance, 0.001)
+            session.pinchRemainder += (snap.pairDistance - reference.pairDistance) /
                 denominator * config.pinchStepsPerScreen
             let steps = integralSteps(&session.pinchRemainder)
             if steps != 0 {
@@ -363,7 +456,7 @@ public final class GestureRecognizer {
                                         repeats: abs(steps)))
             }
         case .rotate:
-            session.rotationRemainder += wrappedAngle(snap.pairAngle - session.base.last.pairAngle)
+            session.rotationRemainder += wrappedAngle(snap.pairAngle - reference.pairAngle)
             let steps = Int((session.rotationRemainder / config.rotationStepRadians)
                 .rounded(.towardZero))
             if steps != 0 {
@@ -379,14 +472,17 @@ public final class GestureRecognizer {
         mode = .two(session)
     }
 
-    private func finishTwo(_ session: TwoSession, frame: TouchFrame,
+    private func finishTwo(_ session: TwoSession, released: [TouchContact], frame: TouchFrame,
                            now: TimeInterval, actions: inout [GestureAction]) {
         let isTap = session.base.sawExplicitRelease && session.kind == .undecided &&
             elapsed(from: session.base, frame: frame) <= config.tapMaxDuration &&
-            session.base.travel <= config.tapMaxTravel
+            session.base.travel <= config.tapMaxTravel &&
+            contactsStayedNearStart(released, start: session.base.start)
         if isTap, session.matchesPendingSecondaryTap {
             pendingSecondaryTap = nil
             actions.append(.command(.smartZoom, repeats: 1))
+        } else if isTap, !config.smartZoomEnabled {
+            actions.append(.click(button: .secondary, count: 1))
         } else if isTap {
             pendingSecondaryTap = PendingSecondaryTap(
                 centroid: session.base.start.centroid,
@@ -402,10 +498,10 @@ public final class GestureRecognizer {
                            now: TimeInterval, actions: inout [GestureAction]) {
         var session = previous
         if active.isEmpty {
-            session.base.sawExplicitRelease = session.base.sawExplicitRelease ||
-                released.contains { session.base.ids.contains($0.id) }
+            session.base.sawExplicitRelease = released.contains { session.base.ids.contains($0.id) }
             if session.kind == .pending,
                session.base.sawExplicitRelease,
+               contactsStayedNearStart(released, start: session.base.start),
                elapsed(from: session.base, frame: frame) <= config.tapMaxDuration,
                session.base.travel <= config.tapMaxTravel {
                 actions.append(.command(.lookUp, repeats: 1))
@@ -417,17 +513,19 @@ public final class GestureRecognizer {
             return
         }
 
-        let activeIds = Set(active.map { $0.id })
+        let activeIds = identifiers(active)
         if active.count < 3, activeIds.isSubset(of: session.base.ids) {
             session.base.sawExplicitRelease = session.base.sawExplicitRelease ||
                 released.contains { session.base.ids.contains($0.id) }
             if session.kind == .pending {
+                guard contactsStayedNearStart(active, start: session.base.start) else {
+                    actions += cancelAndSuppress()
+                    return
+                }
+                // 部分 UP 后不再让停留计时器按下左键。
+                session.holdDeadline = .infinity
                 mode = .three(session)
             } else {
-                if session.kind == .dragging {
-                    actions.append(.drag(phase: .ended, dx: 0, dy: 0,
-                                         sensitivityPercent: session.sensitivityPercent))
-                }
                 actions += cancelAndSuppress()
             }
             return
@@ -438,10 +536,6 @@ public final class GestureRecognizer {
                session.base.travel <= config.tapMaxTravel {
                 begin(active: active, frame: frame, now: now, actions: &actions)
             } else {
-                if session.kind == .dragging {
-                    actions.append(.drag(phase: .ended, dx: 0, dy: 0,
-                                         sensitivityPercent: session.sensitivityPercent))
-                }
                 actions += cancelAndSuppress()
             }
             return
@@ -486,11 +580,28 @@ public final class GestureRecognizer {
     }
 
     private func feedFour(_ previous: FourSession, active: [TouchContact],
-                          released _: [TouchContact], frame: TouchFrame,
+                          released: [TouchContact], frame: TouchFrame,
                           now _: TimeInterval, actions: inout [GestureAction]) {
         var session = previous
         if active.isEmpty {
+            if session.kind == .pending,
+               released.contains(where: { session.base.ids.contains($0.id) }),
+               contactsStayedNearStart(released, start: session.base.start),
+               elapsed(from: session.base, frame: frame) <= config.tapMaxDuration,
+               session.base.travel <= config.tapMaxTravel {
+                actions.append(.command(.switchApp, repeats: 1))
+            }
             mode = .idle
+            return
+        }
+        if active.count < 4, identifiers(active).isSubset(of: session.base.ids), session.kind == .pending {
+            guard contactsStayedNearStart(active, start: session.base.start) else {
+                actions += cancelAndSuppress()
+                return
+            }
+            session.base.sawExplicitRelease = session.base.sawExplicitRelease ||
+                released.contains { session.base.ids.contains($0.id) }
+            mode = .four(session)
             return
         }
         guard active.count == 4, snapshot(for: active).ids == session.base.ids else {
@@ -541,16 +652,31 @@ public final class GestureRecognizer {
     }
 
     private func snapshot(for contacts: [TouchContact]) -> Snapshot {
-        let points = contacts.map { SIMD2<Float>($0.x, $0.y) }
-        let count = Float(max(points.count, 1))
-        let centroid = points.reduce(SIMD2<Float>(repeating: 0), +) / count
-        let pairVector = points.count >= 2 ? points[1] - points[0] : SIMD2<Float>(repeating: 0)
+        let count = Float(max(contacts.count, 1))
+        var sum = SIMD2<Float>(repeating: 0)
+        var ids = ContactIDs()
+        var orderedIDs = SIMD4<UInt8>(repeating: 0)
+        var positions = SIMD8<Float>(repeating: 0)
+        for (index, contact) in contacts.enumerated() {
+            ids.insert(contact.id)
+            orderedIDs[index] = contact.id
+            positions[index * 2] = contact.x
+            positions[index * 2 + 1] = contact.y
+            sum += SIMD2(contact.x, contact.y)
+        }
+        let centroid = sum / count
+        let pairVector = contacts.count == 2
+            ? SIMD2<Float>(contacts[1].x - contacts[0].x, contacts[1].y - contacts[0].y)
+            : SIMD2<Float>(repeating: 0)
         let pairDistance = (pairVector.x * pairVector.x + pairVector.y * pairVector.y).squareRoot()
         let pairAngle = Float(atan2(Double(pairVector.y), Double(pairVector.x)))
-        let spread = points.reduce(Float(0)) { partial, point in
-            partial + distance(point, centroid)
-        } / count
-        return Snapshot(ids: Set(contacts.map { $0.id }), centroid: centroid,
+        var spread: Float = 0
+        if contacts.count == 4 {
+            for contact in contacts { spread += distance(SIMD2(contact.x, contact.y), centroid) }
+            spread /= count
+        }
+        return Snapshot(ids: ids, orderedIDs: orderedIDs, positions: positions,
+                        count: contacts.count, centroid: centroid,
                         pairDistance: pairDistance, pairAngle: pairAngle, spread: spread)
     }
 
@@ -608,9 +734,26 @@ public final class GestureRecognizer {
     }
 
     private func cancelAndSuppress() -> [GestureAction] {
-        pendingSecondaryTap = nil
-        mode = .idle
+        let actions = reset()
         suppressUntilRelease = true
-        return []
+        return actions
+    }
+
+    private func identifiers(_ contacts: [TouchContact]) -> ContactIDs {
+        var ids = ContactIDs()
+        for contact in contacts { ids.insert(contact.id) }
+        return ids
+    }
+
+    private func contactsStayedNearStart(_ contacts: [TouchContact], start: Snapshot) -> Bool {
+        for contact in contacts {
+            guard let index = (0..<start.count).first(where: { start.orderedIDs[$0] == contact.id }) else {
+                return false
+            }
+            let travel = abs(contact.x - start.positions[index * 2]) +
+                abs(contact.y - start.positions[index * 2 + 1])
+            if travel > config.tapMaxTravel { return false }
+        }
+        return true
     }
 }

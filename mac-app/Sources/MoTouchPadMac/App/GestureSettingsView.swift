@@ -21,7 +21,13 @@ final class GesturePreferences: ObservableObject {
         self.defaults = defaults
         if let data = defaults.data(forKey: Self.storageKey),
            let restored = try? JSONDecoder().decode(GestureBindings.self, from: data) {
-            bindings = restored
+            var migrated = restored
+            // 新增动作在旧偏好中缺少键；显式清除的 null 仍保留。
+            if let keys = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               keys["switchApp"] == nil {
+                migrated.switchApp = GestureBindings.defaults.switchApp
+            }
+            bindings = migrated
         } else {
             bindings = .defaults
         }
@@ -36,8 +42,11 @@ final class GesturePreferences: ObservableObject {
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(bindings) else { return }
-        defaults.set(data, forKey: Self.storageKey)
+        guard let data = try? JSONEncoder().encode(bindings),
+              var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        if bindings.switchApp == nil { object["switchApp"] = NSNull() }
+        guard let stored = try? JSONSerialization.data(withJSONObject: object) else { return }
+        defaults.set(stored, forKey: Self.storageKey)
     }
 }
 
@@ -51,6 +60,9 @@ struct GestureSettingsView: View {
             Text("快捷键发送给当前前台 App；未设置的动作会被识别但不会注入。点击输入框后按下新的组合键，Delete 可清除。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            Text("单指轻点后再次按住移动可拖移；四指轻点可切换应用。启用智能缩放后，双指右键等待 0.30 秒以区分双击。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
             Form {
                 Section("浏览与缩放") {
@@ -61,7 +73,7 @@ struct GestureSettingsView: View {
                 }
                 Section("窗口与桌面") {
                     rows(for: [.missionControl, .appExpose, .spaceLeft, .spaceRight,
-                               .showDesktop, .appLauncher])
+                               .showDesktop, .appLauncher, .switchApp])
                 }
             }
 
@@ -183,6 +195,7 @@ private extension GestureCommand {
         case .spaceRight: "四指右滑：右侧空间"
         case .showDesktop: "四指张开：显示桌面"
         case .appLauncher: "四指合拢：应用启动器"
+        case .switchApp: "四指轻点：切换应用"
         }
     }
 }

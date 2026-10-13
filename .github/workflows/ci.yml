@@ -58,6 +58,7 @@ jobs:
           swiftc \
             ios-app/App/Model/TouchModels.swift \
             ios-app/App/Protocol/TouchFrameCodec.swift \
+            ios-app/App/Transport/TouchFrameOutbox.swift \
             tools/IOSProtocolFixtureTest.swift \
             -o "$RUNNER_TEMP/motouchpad-ios-protocol-test"
           "$RUNNER_TEMP/motouchpad-ios-protocol-test"

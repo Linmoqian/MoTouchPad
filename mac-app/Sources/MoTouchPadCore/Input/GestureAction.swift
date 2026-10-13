@@ -32,6 +32,7 @@ public enum GestureCommand: String, CaseIterable, Codable, Equatable, Identifiab
     case spaceRight
     case showDesktop
     case appLauncher
+    case switchApp
 
     public var id: String { rawValue }
 }

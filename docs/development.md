@@ -46,7 +46,7 @@ macOS：
     cd mac-app
     swift build
     swift test
-    swift run
+    swift run MoTouchPadMac
 
 macOS CGEvent 注入需要辅助功能权限。应用按当前显示器的逻辑坐标换算移动，
 不直接使用 Retina 像素尺寸。

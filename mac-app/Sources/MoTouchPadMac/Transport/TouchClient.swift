@@ -7,17 +7,18 @@ import Network
 
 /// TCP 客户端：连接触控端，发送心跳并切分协议帧。
 final class TouchClient {
-    private let queue = DispatchQueue(label: "com.motouchpad.mac.client")
+    private let queue = DispatchQueue(label: "com.motouchpad.mac.client", qos: .userInteractive)
     private var connection: NWConnection?
-    private var buffer = Data()
+    private var decoder = TouchFrameStreamDecoder()
     private var generation: UInt64 = 0
     private var isConnected = false
 
-    var onFrame: ((TouchFrame) -> Void)?
-    var onStateChange: ((Bool) -> Void)?
-    var onError: ((String) -> Void)?
+    private let deliveryGate = ConnectionDeliveryGate()
+    var onFrames: (@MainActor ([TouchFrame]) -> Void)?
+    var onStateChange: (@MainActor (Bool) -> Void)?
+    var onError: (@MainActor (String) -> Void)?
 
-    func connect(host: String) {
+    func connect(host: String, port: UInt16 = TouchProtocol.port) {
         queue.async { [weak self] in
             guard let self else { return }
             disconnectOnQueue(notify: false)
@@ -29,12 +30,15 @@ final class TouchClient {
 
             generation &+= 1
             let token = generation
+            deliveryGate.set(token)
+            let tcp = NWProtocolTCP.Options()
+            tcp.noDelay = true
             let newConnection = NWConnection(
                 host: NWEndpoint.Host(trimmedHost),
-                port: NWEndpoint.Port(rawValue: TouchProtocol.port)!,
-                using: .tcp)
+                port: NWEndpoint.Port(rawValue: port)!,
+                using: NWParameters(tls: nil, tcp: tcp))
             connection = newConnection
-            buffer.removeAll(keepingCapacity: true)
+            decoder.reset()
             newConnection.stateUpdateHandler = { [weak self, weak newConnection] state in
                 guard let newConnection else { return }
                 self?.queue.async { [weak self, weak newConnection] in
@@ -59,7 +63,7 @@ final class TouchClient {
         case .ready:
             guard !isConnected else { return }
             isConnected = true
-            onStateChange?(true)
+            deliver(token: token) { $0.onStateChange?(true) }
             startHeartbeat(connection: current, token: token)
             receive(connection: current, token: token)
         case .failed(let error):
@@ -99,7 +103,7 @@ final class TouchClient {
                 guard let self, let current,
                       token == generation, connection === current else { return }
                 if let data, !data.isEmpty {
-                    if !ingest(data) {
+                    if !ingest(data, token: token) {
                         fail("收到无法解析的触控帧", connection: current, token: token)
                         return
                     }
@@ -113,18 +117,11 @@ final class TouchClient {
         }
     }
 
-    private func ingest(_ data: Data) -> Bool {
-        buffer.append(data)
+    private func ingest(_ data: Data, token: UInt64) -> Bool {
         do {
-            while let (frame, byteCount) = try TouchFrameCodec.parse(buffer) {
-                buffer = Data(buffer.dropFirst(byteCount))
-                onFrame?(frame)
-            }
+            let frames = try decoder.append(data)
+            if !frames.isEmpty { deliver(token: token) { $0.onFrames?(frames) } }
         } catch {
-            return false
-        }
-        if buffer.count > TouchProtocol.maxFrameSize {
-            buffer.removeAll(keepingCapacity: true)
             return false
         }
         return true
@@ -132,22 +129,46 @@ final class TouchClient {
 
     private func fail(_ message: String, connection current: NWConnection, token: UInt64) {
         guard token == generation, connection === current else { return }
-        reportError(message)
         disconnectOnQueue(notify: true)
+        reportError(message)
     }
 
     private func disconnectOnQueue(notify: Bool) {
         generation &+= 1
+        deliveryGate.set(generation)
         connection?.cancel()
         connection = nil
-        buffer.removeAll(keepingCapacity: true)
+        decoder.reset()
         if isConnected {
             isConnected = false
-            if notify { onStateChange?(false) }
+            if notify { deliver(token: generation) { $0.onStateChange?(false) } }
         }
     }
 
     private func reportError(_ message: String) {
-        onError?(message)
+        deliver(token: generation) { $0.onError?(message) }
+    }
+
+    private func deliver(token: UInt64, action: @escaping @MainActor (TouchClient) -> Void) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.deliveryGate.matches(token) else { return }
+            action(self)
+        }
+    }
+}
+
+/// 主线程消费前再次校验会话，阻止已解码但排队中的旧帧污染新连接。
+private final class ConnectionDeliveryGate {
+    private let lock = NSLock()
+    private var token: UInt64 = 0
+    func set(_ value: UInt64) {
+        lock.lock()
+        token = value
+        lock.unlock()
+    }
+    func matches(_ value: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return token == value
     }
 }

@@ -12,6 +12,10 @@ final class CGEventInputBackend {
     private var pendingSecondaryTapWork: DispatchWorkItem?
 
     func updateBindings(_ bindings: GestureBindings) {
+        if gestures.config.smartZoomEnabled != (bindings.smartZoom != nil) {
+            reset()
+        }
+        gestures.config.smartZoomEnabled = bindings.smartZoom != nil
         executor.updateBindings(bindings)
     }
 
@@ -29,7 +33,7 @@ final class CGEventInputBackend {
 
     private func schedulePendingSecondaryTap() {
         pendingSecondaryTapWork?.cancel()
-        guard let deadline = gestures.pendingSecondaryTapDeadline else {
+        guard let deadline = gestures.nextDeadline else {
             pendingSecondaryTapWork = nil
             return
         }
@@ -37,7 +41,7 @@ final class CGEventInputBackend {
         let delay = max(0, deadline - ProcessInfo.processInfo.systemUptime)
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.executor.execute(self.gestures.flushPending())
+            self.executor.execute(self.gestures.advance())
             self.schedulePendingSecondaryTap()
         }
         pendingSecondaryTapWork = work

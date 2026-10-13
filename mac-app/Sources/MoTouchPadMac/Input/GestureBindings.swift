@@ -80,6 +80,7 @@ struct KeyboardShortcut: Codable, Equatable {
         switch keyCode {
         case 0: "A"
         case 2: "D"
+        case 48: "Tab"
         case 24: "="
         case 27: "-"
         case 30: "]"
@@ -110,6 +111,7 @@ struct GestureBindings: Codable, Equatable {
     var spaceRight: KeyboardShortcut?
     var showDesktop: KeyboardShortcut?
     var appLauncher: KeyboardShortcut?
+    var switchApp: KeyboardShortcut? = KeyboardShortcut(keyCode: 48, modifiers: [.command])
 
     static let defaults = GestureBindings(
         pageBack: KeyboardShortcut(keyCode: 33, modifiers: [.command]),
@@ -143,6 +145,7 @@ struct GestureBindings: Codable, Equatable {
         case .spaceRight: spaceRight
         case .showDesktop: showDesktop
         case .appLauncher: appLauncher
+        case .switchApp: switchApp
         }
     }
 
@@ -162,6 +165,7 @@ struct GestureBindings: Codable, Equatable {
         case .spaceRight: spaceRight = shortcut
         case .showDesktop: showDesktop = shortcut
         case .appLauncher: appLauncher = shortcut
+        case .switchApp: switchApp = shortcut
         }
     }
 }

@@ -16,8 +16,6 @@ import java.io.Closeable
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
@@ -32,7 +30,9 @@ class TouchServer(private val statusChanged: () -> Unit) : Closeable {
     private val running = AtomicBoolean(false)
     private val sequence = AtomicInteger()
     private val outputLock = Any()
-    private val outbound = LinkedBlockingQueue<ByteArray>(256)
+    private val outbound = TouchFrameOutbox()
+    @Volatile
+    private var session = 0L
     private var serverSocket: ServerSocket? = null
     private var client: Socket? = null
     private var output: BufferedOutputStream? = null
@@ -60,17 +60,20 @@ class TouchServer(private val statusChanged: () -> Unit) : Closeable {
         if (!running.compareAndSet(false, true)) return
         thread(name = "MoTouchPad-sender", isDaemon = true) {
             while (running.get()) {
-                val packet = outbound.poll(500, TimeUnit.MILLISECONDS) ?: continue
-                synchronized(outputLock) {
-                    try {
-                        output?.apply {
-                            write(packet)
-                            flush()
-                        }
-                    } catch (exception: Exception) {
-                        Log.e(LOG_TAG, "Touch frame write failed", exception)
-                        clearClient(client)
-                    }
+                val packet = outbound.poll() ?: continue
+                val target = synchronized(outputLock) {
+                    val socket = client
+                    val stream = output
+                    if (packet.session == session && socket != null && stream != null) {
+                        socket to stream
+                    } else null
+                } ?: continue
+                try {
+                    target.second.write(TouchFrameCodec.encode(packet.frame))
+                    target.second.flush()
+                } catch (exception: Exception) {
+                    Log.e(LOG_TAG, "Touch frame write failed", exception)
+                    clearClient(target.first)
                 }
             }
         }
@@ -119,11 +122,12 @@ class TouchServer(private val statusChanged: () -> Unit) : Closeable {
     }
 
     fun send(event: MotionEvent, surfaceWidth: Int, surfaceHeight: Int) {
+        val eventSession = session
         if (!connected) return
         val actionIndex = event.actionIndex
         val action = event.actionMasked
         if (action == MotionEvent.ACTION_CANCEL) {
-            sendSnapshot(emptyList())
+            sendSnapshot(emptyList(), expectedSession = eventSession)
             return
         }
 
@@ -146,43 +150,43 @@ class TouchServer(private val statusChanged: () -> Unit) : Closeable {
                 )
             }
         }
-        sendSnapshot(contacts)
+        sendSnapshot(contacts, expectedSession = eventSession)
 
         if (action == MotionEvent.ACTION_UP) {
-            sendSnapshot(emptyList())
+            sendSnapshot(emptyList(), expectedSession = eventSession)
         } else if (action == MotionEvent.ACTION_POINTER_UP) {
-            sendSnapshot(contacts.filter { it.touching })
+            sendSnapshot(contacts.filter { it.touching }, expectedSession = eventSession)
         }
     }
 
-    private fun sendSnapshot(contacts: List<TouchContact>, type: FrameType = FrameType.TOUCH) {
-        enqueue(
-            TouchFrameCodec.encode(
-                TouchFrame(
-                    type = type,
-                    sequence = sequence.incrementAndGet().toLong(),
-                    timestampNanos = SystemClock.elapsedRealtimeNanos(),
-                    buttons = 0,
-                    sensitivityPercent = sensitivityPercent,
-                    naturalScrolling = naturalScrolling,
-                    contacts = contacts
-                )
-            )
+    private fun sendSnapshot(
+        contacts: List<TouchContact>,
+        type: FrameType = FrameType.TOUCH,
+        expectedSession: Long = session
+    ) {
+        val token = expectedSession
+        val frame = TouchFrame(
+            type = type,
+            sequence = sequence.incrementAndGet().toLong(),
+            timestampNanos = SystemClock.elapsedRealtimeNanos(),
+            buttons = 0,
+            sensitivityPercent = sensitivityPercent,
+            naturalScrolling = naturalScrolling,
+            contacts = contacts
         )
-    }
-
-    private fun enqueue(packet: ByteArray) {
-        if (!outbound.offer(packet)) {
-            outbound.poll()
-            outbound.offer(packet)
-            Log.w(LOG_TAG, "Outbound queue full; dropped oldest snapshot")
+        if (!outbound.offer(TouchFrameOutbox.Packet(token, frame))) {
+            Log.w(LOG_TAG, "Critical touch queue overflow; ending session")
+            synchronized(outputLock) {
+                if (token == session) clearClient(client)
+            }
         }
     }
 
     private fun replaceClient(socket: Socket) {
         synchronized(outputLock) {
             client?.close()
-            outbound.clear()
+            session += 1
+            outbound.begin(session)
             client = socket
             output = BufferedOutputStream(socket.getOutputStream(), 8192)
             val type = if (socket.inetAddress.isLoopbackAddress) {
@@ -190,9 +194,9 @@ class TouchServer(private val statusChanged: () -> Unit) : Closeable {
             } else {
                 ConnectionType.WIFI
             }
-            setConnection(true, type)
             Log.i(LOG_TAG, "Sending protocol hello over $type")
             sendSnapshot(emptyList(), FrameType.HELLO)
+            setConnection(true, type)
         }
     }
 
@@ -207,6 +211,7 @@ class TouchServer(private val statusChanged: () -> Unit) : Closeable {
             client = null
             output = null
             outbound.clear()
+            session += 1
             setConnection(false, ConnectionType.NONE)
             Log.i(LOG_TAG, "Client cleared")
         }

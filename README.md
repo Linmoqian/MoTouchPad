@@ -93,7 +93,7 @@ Windows UI 默认使用鼠标兼容模式。只有显式勾选实验性 VHF 时�
     cd mac-app
     swift build
     swift test
-    swift run
+    swift run MoTouchPadMac
 
 首次注入鼠标需要在系统设置的隐私与安全性 → 辅助功能中授权 MoTouchPad。
 
