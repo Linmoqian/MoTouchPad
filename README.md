@@ -111,6 +111,7 @@ Windows UI 默认使用鼠标兼容模式。只有显式勾选实验性 VHF 时�
 | [ios-app/](ios-app/) | iOS 触控采集、设置、协议与 TCP 服务端 |
 | [windows-app/](windows-app/) | WPF 接收端、TCP/ADB、协议与输入路由 |
 | [mac-app/](mac-app/) | macOS 接收端、协议、手势与 CGEvent |
+| [core-rust/](core-rust/) | 独立共享核心原型，与 Swift 做动作及性能对照 |
 | [windows-driver/](windows-driver/) | 独立 KMDF / VHF 驱动实验 |
 | [mac-driver/](mac-driver/) | 独立 DriverKit 驱动实验占位 |
 | [protocol/](protocol/) | 唯一网络协议源和跨端黄金样例 |
@@ -135,3 +136,6 @@ Android USB 调试和 ADB；生产版可替换为正式 USB 通道。Windows 驱
 测试签名或 Microsoft 签名流程，macOS DriverKit 仍是实验占位。
 
 更多环境说明见 [docs/development.md](docs/development.md)。
+
+Rust 共享核心评估可运行 `bash tools/RustCoreComparison/run.sh`，方法与实测判断见
+[docs/rust-core-evaluation.md](docs/rust-core-evaluation.md)。

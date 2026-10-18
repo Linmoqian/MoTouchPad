@@ -1,6 +1,8 @@
 # Android / Gradle
 .gradle/
 .kotlin/
+/core-rust/target/
+/tools/RustCoreComparison/results/
 **/build/
 local.properties
 *.apk
@@ -12,6 +14,10 @@ local.properties
 **/obj/
 *.user
 *.suo
+
+# Rust's src/bin contains source, not build output.
+!/core-rust/src/bin/
+!/core-rust/src/bin/*.rs
 
 # Driver output
 **/x64/

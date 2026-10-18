@@ -10,6 +10,9 @@ let package = Package(
     platforms: [
         .macOS(.v13)
     ],
+    products: [
+        .library(name: "MoTouchPadCore", targets: ["MoTouchPadCore"])
+    ],
     targets: [
         .executableTarget(
             name: "TouchPipelineBenchmark",

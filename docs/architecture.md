@@ -25,6 +25,8 @@ WDK 或驱动签名。
 | 移动端 Protocol / protocol | 小端编码和校验 |
 | 移动端 Transport / transport | 监听、心跳、连接与有界发送队列 |
 | mac-app/Sources/MoTouchPadCore/ | macOS 原生模型、协议、流解码与纯手势状态机 |
+| core-rust/ | 独立 Rust codec、纯手势状态机与 C ABI 评估原型 |
+| tools/RustCoreComparison/ | 相同轨迹的 Swift / Rust 动作对照与调用成本测量 |
 | mac-app/Sources/MoTouchPadMac/App/ | 窗口、接收状态与快捷键偏好 |
 | mac-app/Sources/MoTouchPadMac/Transport/ | NWConnection 生命周期、心跳与批量派发 |
 | mac-app/Sources/MoTouchPadMac/Input/ | 动作执行器、CGEvent sink 与屏幕坐标适配 |
@@ -98,6 +100,10 @@ macOS 输入需要辅助功能授权，iOS 本地 TCP 连接需要本地网络�
 Release 微基准测量 CPU 解码和手势处理耗时，不等于端到端网络延迟；两设备单调
 时钟不共享原点，不能直接相减计算单向延迟。回环 TCP 测试验证实际传输中的分片、
 合包与顺序。真实 Wi-Fi 延迟和目标 App 的手势效果需在设备上验收。
+
+共享核心原型通过 C ABI 借用完整帧，输出固定容量平台无关动作。单句柄必须串行
+调用，计时器由宿主驱动，reset 产生的拖移结束动作仍由平台输入层执行。应用主链
+继续使用原生核心，原型的正确性与性能评估见 [Rust 核心评估](rust-core-evaluation.md)。
 
 Android CI 使用 JDK 21 和仓库 Gradle wrapper；macOS 使用 SwiftPM；iOS 使用
 无签名 xcodebuild；Windows 使用 .NET 9。CI 只构建和测试，不打包、签名或发布

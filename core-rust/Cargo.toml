@@ -1,0 +1,17 @@
+[package]
+name = "motouchpad-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.83"
+publish = false
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[[bin]]
+name = "core-replay"
+path = "src/bin/replay.rs"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

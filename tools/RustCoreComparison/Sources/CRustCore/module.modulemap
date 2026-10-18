@@ -1,0 +1,4 @@
+module CRustCore [system] {
+    header "../../../../core-rust/include/motouchpad_core.h"
+    export *
+}
